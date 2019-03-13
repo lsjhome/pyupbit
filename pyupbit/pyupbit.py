@@ -1,9 +1,10 @@
 import json
-import time
-import requests
-import jwt
 import logging
 from urllib.parse import urlencode
+from datetime import datetime, timedelta
+
+import requests
+import jwt
 
 
 class PyUpbit():
@@ -156,7 +157,7 @@ class PyUpbit():
         """Month Candle
         https://docs.upbit.com/v1.0/reference#%EC%9B%94month-%EC%BA%94%EB%93%A4-1
         Args:
-            market(str): market
+            market(str): market code
             to(str): last candle time (exclusive) Format: "YYYY-MM-ddThh:mm:ss-ms:ns"
             count(int): the number of candles, max 19
         Returns:
@@ -337,9 +338,99 @@ class PyUpbit():
         markets_data = ','.join(valid_market)
         params = {'markets': markets_data}
         return self._get(url, params=params)
+    
+    ################
+    # EXCHANGE API #
+    ################
+    
+    def get_accounts(self):
+        """show all accounts status
+        https://docs.upbit.com/v1.0/reference#%EC%9E%90%EC%82%B0-%EC%A0%84%EC%B2%B4-%EC%A1%B0%ED%9A%8C
+        Returns:
+            list(dictionary array): Accunt status by currency
+        Examples:
+            >>> upbit.get_accounts()
+            [{'currency': 'BTC', 'balance': '0.001', 'locked': '0.0', 
+              'avg_buy_price': '4082000', 'avg_buy_price_modified': False,
+              'unit_currency': 'KRW', 'avg_krw_buy_price': '4082000', 'modified': False},
+             {'currency': 'KRW', 'balance': '35001838.38973361', 'locked': '0.0',
+              'avg_buy_price': '0', 'avg_buy_price_modified': True,
+              'unit_currency': 'KRW', 'avg_krw_buy_price': '0', 'modified': True},
+             {'currency': 'USDT', 'balance': '0.00006577', 'locked': '0.0',
+              'avg_buy_price': '1146.36', 'avg_buy_price_modified': False,
+              'unit_currency': 'KRW', 'avg_krw_buy_price': '1146.36', 'modified': False}]
+        """
+        url = 'https://api.upbit.com/v1/accounts'
+        return self._get(url, headers=self._get_headers())    
 
-        #################
+    def get_chance(self, market):
+        """Available order by market
+        https://docs.upbit.com/v1.0/reference#%EC%A3%BC%EB%AC%B8-%EA%B0%80%EB%8A%A5-%EC%A0%95%EB%B3%B4
+        Args:
+            market(str): market code
+        Returns:
+            dict: bid_fee, ask_fee, market, bid_account, ask_account
+        Examples:
+            >>> upbit.get_chance('KRW-BTC')
+            {'bid_fee': '0.0005', 'ask_fee': '0.0005',
+             'market': {'id': 'KRW-BTC', 'name': 'BTC/KRW',
+                        'order_types': ['limit'], 'order_sides': ['ask', 'bid'],
+                        'bid': {'currency': 'KRW', 'price_unit': None, 'min_total': 1000},
+                        'ask': {'currency': 'BTC', 'price_unit': None, 'min_total': 1000},
+                        'max_total': '1000000000.0', 'state': 'active'},
+             'bid_account': {'currency': 'KRW', 'balance': '35001838.38973361',
+                             'locked': '0.0', 'avg_buy_price': '0',
+                             'avg_buy_price_modified': True, 'unit_currency': 'KRW',
+                             'avg_krw_buy_price': '0', 'modified': True},
+             'ask_account': {'currency': 'BTC', 'balance': '0.001', 'locked': '0.0',
+                             'avg_buy_price': '4082000', 'avg_buy_price_modified': False,
+                             'unit_currency': 'KRW', 'avg_krw_buy_price': '4082000',
+                             'modified': False}}
+        """
+        url = 'https://api.upbit.com/v1/orders/chance'
+        if market not in self.markets:
+            logging.error('invalid market: %s' % market)
+            raise Exception('invalid market: %s' % market)
+        query = {'market': market}
+        return self._get(url, headers=self._get_headers(query), params=query)
+    
+    def get_order(self, uuid, identifier):
+        
+        url = 'https://api.upbit.com/v1/order'
+        if not any([uuid, idetifier]):
+            logging.error('either uuid or identifer are required')
+            raise Exception('either uuid or identifer are required')        
+        try:
+            query = {}
+            query_pre = {'uuid': uuid, 'identifier': identifier}
+            for key, value in query_pre.items():
+                if value:
+                    query[key] = value
+            return self._get(url, self._get_headers(query), params=query)
+        except Exception as e:
+            logging.error(e)
+            raise Exception(e)
+            
+    def get_orders(self, market, state, page=1, order_by='asc'):
+        
+        url = 'https://api.upbit.com/v1/orders'
+        if market not in self.markets:
+            logging.error('invalid market: %s' % market)
+            raise Exception('invalid market: %s' % market)
 
+        if state not in ['wait', 'done', 'cancel']:
+            logging.error('invalid state: %s' % state)
+            raise Exception('invalid state: %s' % state)
+
+        if order_by not in ['asc', 'desc']:
+            logging.error('invalid order_by: %s' % order_by)
+            raise Exception('invalid order_by: %s' % order_by)
+            
+        query = {'market': market, 'state': state, 'page': page, 'order_by': order_by}
+        
+        return self._get(url, self._get_headers(query), params=query)
+                
+    #################
     # HELPER METHOD #
     #################
 
@@ -379,3 +470,28 @@ class PyUpbit():
         except Exception as e:
             logging.error(e)
             raise Exception(e)
+            
+    def _get_token(self, query):
+        """
+        Args:
+            query(dict): dictionary mapping for query string
+        Returns:
+            str: encoded json web token
+        """
+        payload = {
+            'access_key': self.access_key,
+            'nonce': int(datetime.timestamp(datetime.utcnow() + timedelta(hours=9))),  
+        }
+        if query is not None:
+            payload['query'] = urlencode(query)
+        return jwt.encode(payload, self.secret_key, algorithm='HS256').decode('utf8')
+
+    def _get_headers(self, query=None):
+        """
+        Args:
+            query(dict): dictionary mapping for query string
+        Returns:
+            dict: headers for requests
+        """
+        headers = {'Authorization': 'Bearer %s' % self._get_token(query)}
+        return headers
