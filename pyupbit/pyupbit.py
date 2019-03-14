@@ -31,7 +31,7 @@ class PyUpbit():
         """Available Market Code in Upbit
         https://docs.upbit.com/v1.0/reference#%EB%A7%88%EC%BC%93-%EC%BD%94%EB%93%9C-%EC%A1%B0%ED%9A%8C
         Returns:
-            list: dictionary array
+            list(dictionary array): available market code and its name
         Examples:
             >>> upbit.get_minutes_candles()
             [{'market': 'KRW-BTC', 'korean_name': '비트코인', 'english_name': 'Bitcoin'},
@@ -338,11 +338,11 @@ class PyUpbit():
         markets_data = ','.join(valid_market)
         params = {'markets': markets_data}
         return self._get(url, params=params)
-    
+
     ################
     # EXCHANGE API #
     ################
-    
+
     def get_accounts(self):
         """show all accounts status
         https://docs.upbit.com/v1.0/reference#%EC%9E%90%EC%82%B0-%EC%A0%84%EC%B2%B4-%EC%A1%B0%ED%9A%8C
@@ -350,7 +350,7 @@ class PyUpbit():
             list(dictionary array): Accunt status by currency
         Examples:
             >>> upbit.get_accounts()
-            [{'currency': 'BTC', 'balance': '0.001', 'locked': '0.0', 
+            [{'currency': 'BTC', 'balance': '0.001', 'locked': '0.0',
               'avg_buy_price': '4082000', 'avg_buy_price_modified': False,
               'unit_currency': 'KRW', 'avg_krw_buy_price': '4082000', 'modified': False},
              {'currency': 'KRW', 'balance': '35001838.38973361', 'locked': '0.0',
@@ -361,7 +361,7 @@ class PyUpbit():
               'unit_currency': 'KRW', 'avg_krw_buy_price': '1146.36', 'modified': False}]
         """
         url = 'https://api.upbit.com/v1/accounts'
-        return self._get(url, headers=self._get_headers())    
+        return self._get(url, headers=self._get_headers())
 
     def get_chance(self, market):
         """Available order by market
@@ -393,26 +393,84 @@ class PyUpbit():
             raise Exception('invalid market: %s' % market)
         query = {'market': market}
         return self._get(url, headers=self._get_headers(query), params=query)
-    
-    def get_order(self, uuid, identifier):
-        
+
+    def get_order(self, uuid, identifier=None):
+        """check order status
+        https://docs.upbit.com/v1.0.1/reference#%EA%B0%9C%EB%B3%84-%EC%A3%BC%EB%AC%B8-%EC%A1%B0%ED%9A%8C
+        Args:
+            uuid(str): order uuid
+            identifier(str): inquery key set by user, default None
+        Returns:
+            dict: order status
+        Examples
+            >>> upbit.get_order(uuid='80bca2cc-fdbe-44a6-9c5d-328c65dea5b3')
+            {'uuid': '80bca2cc-fdbe-44a6-9c5d-328c65dea5b3',
+             'side': 'ask',
+             'ord_type': 'limit',
+             'price': '350.0',
+             'state': 'done',
+             'market': 'KRW-XRP',
+             'created_at': '2019-03-14T15:11:00+09:00',
+             'volume': '2.0',
+             'remaining_volume': '0.0',
+             'reserved_fee': '0.0',
+             'remaining_fee': '0.0',
+             'paid_fee': '0.35',
+             'locked': '0.0',
+             'executed_volume': '2.0',
+             'trades_count': 1,
+             'trades': [{'market': 'KRW-XRP',
+               'uuid': '9587dbfe-8e74-4c7c-a7cd-878344942a7f',
+               'price': '350.0',
+               'volume': '2.0',
+               'funds': '700.0',
+               'side': 'ask'}]}
+        """
+
         url = 'https://api.upbit.com/v1/order'
-        if not any([uuid, idetifier]):
+        if not any([uuid, identifier]):
             logging.error('either uuid or identifer are required')
-            raise Exception('either uuid or identifer are required')        
+            raise Exception('either uuid or identifer are required')
         try:
             query = {}
             query_pre = {'uuid': uuid, 'identifier': identifier}
             for key, value in query_pre.items():
                 if value:
                     query[key] = value
-            return self._get(url, self._get_headers(query), params=query)
+            return self._get(url, headers=self._get_headers(query), params=query)
         except Exception as e:
             logging.error(e)
             raise Exception(e)
-            
+
     def get_orders(self, market, state, page=1, order_by='asc'):
-        
+        """get order list
+        Args:
+            market(str): market code
+            state(str): order status
+            page(int): number of page, default 1
+            order_by(str): asc(default), desc
+        Returns:
+            list(dictionary array): order list given by market and order state
+
+        Examples:
+            >>> upbit.upbit.get_orders('KRW-XRP', state='done')
+            [{'uuid': '5364ac5b-324d-4ad9-9c66-ae63fe5c9880',
+              'side': 'bid',
+              'ord_type': 'limit',
+              'price': '312.0',
+              'state': 'done',
+              'market': 'KRW-XRP',
+              'created_at': '2018-09-18T12:31:11+09:00',
+              'volume': '40.0',
+              'remaining_volume': '0.0',
+              'reserved_fee': '6.24',
+              'remaining_fee': '0.0',
+              'paid_fee': '6.24',
+              'locked': '0.0',
+              'executed_volume': '40.0',
+              'trades_count': 1}, ...]
+        """
+
         url = 'https://api.upbit.com/v1/orders'
         if market not in self.markets:
             logging.error('invalid market: %s' % market)
@@ -425,11 +483,86 @@ class PyUpbit():
         if order_by not in ['asc', 'desc']:
             logging.error('invalid order_by: %s' % order_by)
             raise Exception('invalid order_by: %s' % order_by)
-            
-        query = {'market': market, 'state': state, 'page': page, 'order_by': order_by}
-        
-        return self._get(url, self._get_headers(query), params=query)
-                
+
+        query = {
+            'market': market,
+            'state': state,
+            'page': page,
+            'order_by': order_by
+        }
+
+        return self._get(url, headers=self._get_headers(query), params=query)
+
+    def order(self, market, side, volume, price, ord_type='limit'):
+        """send order to market
+        https://docs.upbit.com/v1.0.1/reference#%EC%A3%BC%EB%AC%B8%ED%95%98%EA%B8%B0-1
+        Args:
+            market(str): market code
+            side(str): bid or ask
+            volume(int, float): order volume
+            price(int, float): order price
+            ord_type: order type, limit default
+        Returns:
+            dict
+        Examples:
+            >>> upbit.order('KRW-XRP', side='ask', volume=2, price=350)
+            {'uuid': '80bca2cc-fdbe-44a6-9c5d-328c65dea5b3',
+             'side': 'ask',
+             'ord_type': 'limit',
+             'price': '350.0',
+             'state': 'wait',
+             'market': 'KRW-XRP',
+             'created_at': '2019-03-14T15:11:00+09:00',
+             'volume': '2.0',
+             'remaining_volume': '2.0',
+             'reserved_fee': '0.0',
+             'remaining_fee': '0.0',
+             'paid_fee': '0.0',
+             'locked': '2.0',
+             'executed_volume': '0.0',
+             'trades_count': 0}
+        """
+        url = 'https://api.upbit.com/v1/orders'
+
+        if market not in self.markets:
+            logging.error('invalid market: %s' % market)
+            raise Exception('invalid market: %s' % market)
+
+        if side not in ['bid', 'ask']:
+            logging.error('invalid side: %s' % side)
+            raise Exception('invalid side: %s' % side)
+
+        if not self._is_valid_price(market, price):
+            logging.error('invalid price: %s, %s' % (market, price))
+            raise Exception('invalid price: %s, %s' % (market, price))
+
+        if not self._is_above_min(market, price, volume):
+            logging.error('less than minimum order amount: %s, %s, %s' % (market, price, volume))
+            raise Exception('less than minimum order amount: %s, %s, %s' % (market, price, volume))
+
+        data = {
+            'market': market,
+            'side': side,
+            'volume': str(volume),
+            'price': str(price),
+            'ord_type': ord_type,
+        }
+
+        return self._post(url, headers=self._get_headers(data), data=data)
+
+    def cancel_order(self, uuid):
+        """cancel order
+        https://docs.upbit.com/v1.0.1/reference#%EC%A3%BC%EB%AC%B8-%EC%B7%A8%EC%86%8C
+        Args:
+            uuid(str): order uuid
+        Returns:
+        Examples:
+            >>> upbit.cancel_order()
+        """
+        url = 'https://api.upbit.com/v1/order'
+        data = {'uuid': uuid}
+        return self._delete(url, headers=self._get_headers(data), data=data)
+
     #################
     # HELPER METHOD #
     #################
@@ -443,7 +576,6 @@ class PyUpbit():
             list(dictionary array)
         """
         resp = requests.get(url, **kwargs)
-
         if resp.status_code not in [200, 201]:
             logging.error('get(%s) failed(%d)' % (url, resp.status_code))
             if resp.text is not None:
@@ -451,6 +583,40 @@ class PyUpbit():
                 raise Exception('request.get() failed(%s)' % resp.text)
             raise Exception(
                 'request.get() failed(status_code:%d)' % resp.status_code)
+        return json.loads(resp.text)
+
+    def _post(self, url, **kwargs):
+        """requests post wrapper
+        Args:
+            url(str): url
+            **kwargs: Arbitrary keyword arguments
+        Returns:
+            list(dictionary array)
+        """
+        resp = requests.post(url, **kwargs)
+        if resp.status_code not in [200, 201]:
+            logging.error('post(%s) failed(%d)' % (url, resp.status_code))
+            if resp.text is not None:
+                raise Exception('request.post() failed(%s)' % resp.text)
+            raise Exception(
+                'request.post() failed(status_code:%d)' % resp.status_code)
+        return json.loads(resp.text)
+
+    def _delete(self, url, **kwargs):
+        """requests delete wrapper
+        Args:
+            url(str): url
+            **kwargs: Arbitrary keyword arguments
+        Returns:
+            list(dictionary array)
+        """
+        resp = requests.delete(url, **kwargs)
+        if resp.status_code not in [200, 201]:
+            logging.error('delete(%s) failed(%d)' % (url, resp.status_code))
+            if resp.text is not None:
+                raise Exception('request.delete() failed(%s)' % resp.text)
+            raise Exception(
+                'request.delete() failed(status_code:%d)' % resp.status_code)
         return json.loads(resp.text)
 
     def _load_markets(self):
@@ -470,7 +636,7 @@ class PyUpbit():
         except Exception as e:
             logging.error(e)
             raise Exception(e)
-            
+
     def _get_token(self, query):
         """
         Args:
@@ -480,7 +646,7 @@ class PyUpbit():
         """
         payload = {
             'access_key': self.access_key,
-            'nonce': int(datetime.timestamp(datetime.utcnow() + timedelta(hours=9))),  
+            'nonce': int(datetime.timestamp(datetime.utcnow() + timedelta(hours=9))),
         }
         if query is not None:
             payload['query'] = urlencode(query)
@@ -495,3 +661,87 @@ class PyUpbit():
         """
         headers = {'Authorization': 'Bearer %s' % self._get_token(query)}
         return headers
+
+    def _is_valid_price(self, market, price):
+        """check whether the price is valid or not
+        https://upbit.com/service_center/guide
+        Args:
+            market(str): market code
+            price(int, float): coin price
+        Returns:
+            bool
+        """
+        price = float(price)
+        try:
+            base = market.split('-')[0]
+        except Exception as e:
+            logging.error(e)
+            raise Exception(e)
+
+        if base not in ['KRW', 'BTC', 'ETH', 'USDT']:
+            logging.error('invalid base coin %s' % base)
+            raise Exception('invalid base coin %s' % base)
+
+        if base == 'KRW':
+            if price <= 10:
+                if (price * 100) != int(price * 100):
+                    return False
+            elif price <= 100:
+                if (price * 10) != int(price * 10):
+                    return False
+            elif price <= 1000:
+                if price != int(price):
+                    return False
+            elif price <= 10000:
+                if (price % 5) != 0:
+                    return False
+            elif price <= 100000:
+                if (price % 10) != 0:
+                    return False
+            elif price <= 500000:
+                if (price % 50) != 0:
+                    return False
+            elif price <= 1000000:
+                if (price % 100) != 0:
+                    return False
+            elif price <= 2000000:
+                if (price % 500) != 0:
+                    return False
+            elif (price % 1000) != 0:
+                return False
+            return True
+
+        if base in ['BTC', 'ETH']:
+            if (price * 100000000) != int(price * 100000000):
+                print(price)
+                return False
+            return True
+
+        if base == 'USDT':
+            if (price * 1000) != int(price * 1000):
+                return False
+            return True
+
+    def _is_above_min(self, market, price, volume):
+        """check whether the order volume is above or equal to that of minimum requirement
+        https://upbit.com/service_center/guide
+        Args:
+            market(str): market code
+            price(int, float): coin price
+            volume()
+        Returns:
+            bool
+        """
+        price = float(price)
+        volume = float(volume)
+        base = market.split('-')[0]
+
+        if base == 'KRW':
+            if price * volume < 500:
+                return False
+            return True
+
+        if base in ['BTC', 'ETH', 'USDT']:
+            if price * volume < 0.0005:
+                return False
+            return True
